@@ -983,14 +983,19 @@ impl SctkState {
                             let title = builder.namespace.clone();
                             if let Ok((id, surface, common)) = self.get_layer_surface(builder) {
                                 // TODO Ashley: all surfaces should probably have an optional title for a11y if nothing else
-                                let wl_surface = surface.wl_surface().clone();
-                                receive_frame(&mut self.frame_status, &wl_surface);
-                                send_event(&self.events_sender, &self.proxy,
-                                    SctkEvent::LayerSurfaceEvent {
-                                        variant: LayerSurfaceEventVariant::Created(self.queue_handle.clone(), surface, id, common, self.connection.display(), title),
-                                        id: wl_surface.clone(),
-                                    }
-                                );
+
+                                // we do this only after the first configure, because this seems to already attach buffers to the wl_surface,
+                                // which we are not allowed to do until our surface is configured (for the first time)
+                                // see layer.rs
+                                //
+                                // let wl_surface = surface.wl_surface().clone();
+                                // receive_frame(&mut self.frame_status, &wl_surface);
+                                //send_event(&self.events_sender, &self.proxy,
+                                //    SctkEvent::LayerSurfaceEvent {
+                                //        variant: LayerSurfaceEventVariant::Created(self.queue_handle.clone(), surface, id, common, self.connection.display(), title),
+                                //        id: wl_surface.clone(),
+                                //    }
+                                //);
                             }
                         }
                         platform_specific::wayland::layer_surface::Action::Size {
@@ -1484,7 +1489,7 @@ impl SctkState {
         let mut loc = settings.loc;
         match settings.gravity {
             wayland_protocols::xdg::shell::client::xdg_positioner::Gravity::None => {
-                // center on 
+                // center on
                 loc.x -= half_w;
                 loc.y -= half_h;
             },

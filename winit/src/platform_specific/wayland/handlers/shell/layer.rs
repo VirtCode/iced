@@ -13,6 +13,10 @@ use cctk::sctk::{
 use std::fmt::Debug;
 use winit::dpi::LogicalSize;
 
+use crate::event_loop::state::CommonSurface;
+use crate::event_loop::state::send_event;
+use crate::event_loop::state::receive_frame;
+
 impl LayerShellHandler for SctkState {
     fn closed(
         &mut self,
@@ -38,14 +42,14 @@ impl LayerShellHandler for SctkState {
         &mut self,
         _conn: &cctk::sctk::reexports::client::Connection,
         _qh: &cctk::sctk::reexports::client::QueueHandle<Self>,
-        layer: &cctk::sctk::shell::wlr_layer::LayerSurface,
+        wlr_layer: &cctk::sctk::shell::wlr_layer::LayerSurface,
         mut configure: cctk::sctk::shell::wlr_layer::LayerSurfaceConfigure,
         _serial: u32,
     ) {
-        self.request_redraw(layer.wl_surface());
+        self.request_redraw(wlr_layer.wl_surface());
         let layer =
             match self.layer_surfaces.iter_mut().find(|s| {
-                s.surface.wl_surface().id() == layer.wl_surface().id()
+                s.surface.wl_surface().id() == wlr_layer.wl_surface().id()
             }) {
                 Some(l) => l,
                 None => return,
@@ -70,6 +74,17 @@ impl LayerShellHandler for SctkState {
         let mut common = layer.common.lock().unwrap();
         common.size =
             LogicalSize::new(configure.new_size.0, configure.new_size.1);
+
+        // we now announce the created event after the first configuration
+        if first {
+            receive_frame(&mut self.frame_status, &layer.surface.wl_surface());
+            self.sctk_events.push(SctkEvent::LayerSurfaceEvent {
+                    variant: LayerSurfaceEventVariant::Created(self.queue_handle.clone(), CommonSurface::Layer(wlr_layer.clone()), layer.id, layer.common.clone(), self.connection.display(), "amogus".to_string()),
+                    id: layer.surface.wl_surface().clone(),
+                }
+            );
+        }
+
         self.sctk_events.push(SctkEvent::LayerSurfaceEvent {
             variant: LayerSurfaceEventVariant::Configure(
                 configure,
