@@ -5,17 +5,13 @@ pub mod state;
 #[cfg(feature = "a11y")]
 use crate::platform_specific::SurfaceIdWrapper;
 use crate::{
-    futures::futures::channel::mpsc,
-    handlers::overlap::OverlapNotifyV1,
-    platform_specific::wayland::{
+    futures::futures::channel::mpsc, handlers::overlap::OverlapNotifyV1, platform_specific::wayland::{
         handlers::{
             wp_fractional_scaling::FractionalScalingManager,
             wp_viewporter::ViewporterState,
         },
         sctk_event::SctkEvent,
-    },
-    program::Control,
-    subsurface_widget::SubsurfaceState,
+    }, program::Control, sctk_event::LayerSurfaceEventVariant, subsurface_widget::SubsurfaceState
 };
 
 use cctk::{
@@ -43,7 +39,7 @@ use cctk::{
     toplevel_management::ToplevelManagerState,
 };
 use raw_window_handle::HasDisplayHandle;
-use state::{send_event, FrameStatus, SctkWindow};
+use state::{send_event, CommonSurface, FrameStatus, SctkWindow};
 #[cfg(feature = "a11y")]
 use std::sync::{Arc, Mutex};
 use std::{
@@ -56,6 +52,7 @@ use wayland_client::globals::GlobalError;
 use winit::{dpi::LogicalSize, event_loop::OwnedDisplayHandle};
 
 use self::state::SctkState;
+use crate::event_loop::state::receive_frame;
 
 #[derive(Debug, Default, Clone, Copy)]
 pub struct Features {
@@ -201,7 +198,7 @@ impl SctkEventLoop {
                                     let half_h = size.height / 2.;
                                     match settings.gravity {
                                         wayland_protocols::xdg::shell::client::xdg_positioner::Gravity::None => {
-                                            // center on 
+                                            // center on
                                             loc.x -= half_w;
                                             loc.y -= half_h;
                                         },
@@ -468,6 +465,12 @@ impl SctkEventLoop {
                             .events_sender
                             .unbounded_send(Control::Winit(id, e));
                     } else {
+                        // receive another frame after the surface has been created,
+                        // otherwise sometimes it takes ages for the first frame to come
+                        if let SctkEvent::LayerSurfaceEvent { variant: LayerSurfaceEventVariant::Created(_, _, _, _, _, _), id } = &e {
+                            receive_frame(&mut state.state.frame_status, id);
+                        }
+
                         _ = state.state.events_sender.unbounded_send(
                             Control::PlatformSpecific(
                                 crate::platform_specific::Event::Wayland(e),
